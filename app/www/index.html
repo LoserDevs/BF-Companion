@@ -1447,12 +1447,13 @@ const PLAYER_WORDS = [
   [/\bhealers?\b|\bheals\b|\bhealing\b/g, "heal"],
   [/\bdef ?(?:pierce|piercing|ign)\b|\bignore def\b/g, "def ignore"],
   [/\b(?:ele|elem|element(?:al)?) ?(?:dmg|damage)\b/g, "elemental damage"],
-  [/\b(?:status|ailment) ?(?:null|cure|cleanse)\b|\bcleansers?\b|\bcleanse\b/g, "status cure / null"],
+  [/\b(?:status|ailment) ?(?:null|negat\w*|immun\w*)\b|\bnullers?\b/g, "status null"],
+  [/\b(?:status|ailment) ?(?:cure|cleanse|removal)\b|\bcleansers?\b|\bcleanse\b|\bcurers?\b/g, "status cure"],
   [/\bdebuffers?\b/g, "debuffs"], [/\btaunters?\b/g, "taunt"], [/\bdodge\b|\bevade\b/g, "evasion"],
   [/\brevivers?\b|\bko resist\b/g, "revive / ko resist"], [/\batk (?:buffer|up)\b|\battack buff\b/g, "atk buff"],
   [/\bcrit(?:ical)? ?(?:dmg|damage)\b/g, "critical damage"], [/\bcrit(?:ical)? ?(?:hit )?rate\b|\bcrit chance\b/g, "critical rate"],
 ];
-// an effect's own name stays as it is ("status cure / null" isn't read again as "status cure" + "/ null")
+// an effect's own name stays as it is ("element mitigation" isn't read again as "element" + "mitigation")
 const CANON = new Map();
 const canonQ = q => { let r = CANON.get(q); if (r !== undefined) return r;
   const keep = []; let t = q;
@@ -1469,7 +1470,7 @@ function searchHit(u, q) {
   const name = u.n.toLowerCase();
   if (name.includes(q) || phraseHit(u, q)) return true;
   const { roles, words } = parseQuery(q);
-  if (!words.length && roles.length) return roles.every(c => roleOf(u.id, c, true));  // only role names: "mitigation", "status cure / null"
+  if (!words.length && roles.length) return roles.every(c => roleOf(u.id, c, true));  // only role names: "mitigation", "status cure"
   if (!roles.length && words.length === 1 && isAttr(words[0])) return attrHit(u, words[0]);  // "6", "omni", "fire" on their own
   if (roles.length + words.length < 2) return false;
   return roles.every(c => roleOf(u.id, c, true)) && words.every(t => isAttr(t) ? attrHit(u, t) : name.includes(t) || phraseHit(u, t));
@@ -2103,7 +2104,7 @@ function sphereParts(s, el, skip) {
 // A unit's damage and support roles on its BB/SBB/UBB/extra skill, as shares (the weights a sphere's parts get)
 const OFF_ROLES = ["atk", "bbatk", "spark", "crit", "elem", "defign", "hits"], SUP_ROLES = ["mit", "emit", "heal", "bbf", "od", "snull", "ko", "barrier", "taunt"];
 function unitFocus(id, extra) {  // extra: the damage and support parts of its extra skill and SP (sphereCtx), half a role each
-  const off = OFF_ROLES.filter(c => roleOf(id, c) || c === "crit" && roleOf(id, "critrate")).length + (extra?.off || 0) / 2, sup = SUP_ROLES.filter(c => roleOf(id, c)).length + (extra?.sup || 0) / 2, all = off + sup || 1;
+  const off = OFF_ROLES.filter(c => roleOf(id, c) || c === "crit" && roleOf(id, "critrate")).length + (extra?.off || 0) / 2, sup = SUP_ROLES.filter(c => roleOf(id, c) || c === "snull" && roleOf(id, "scure")).length + (extra?.sup || 0) / 2, all = off + sup || 1;
   return { off: off / all, sup: sup / all, label: off > sup * 1.5 ? "damage" : sup > off * 1.5 ? "support" : "damage and support" };
 }
 // What a unit already has, for its sphere suggestions: its extra skill, the SP picked for it (or its suggested build)
@@ -3424,7 +3425,7 @@ const teamName = i => TNAMES[i] || `Team ${i + 1}`;
 const saveTeams = () => { store.set("bf.teams", TEAMS); store.set("bf.tcur", TCUR); store.set("bf.tnames", TNAMES); };
 // the 15 roles: casting twice and extra action count for Fill too since 2026-11-10 (sarc on Discord asked for the rows:
 // Phaedra's recast, Legato's extra action). Fill weighs each (FILL_ROLE_W): a team needn't cover them all, the better one wins
-const COVER = ["mit", "heal", "bbf", "atk", "bbatk", "spark", "crit", "critrate", "elem", "snull", "ko", "defign", "debuff", "twice", "xact"];
+const COVER = ["mit", "heal", "bbf", "atk", "bbatk", "spark", "crit", "critrate", "elem", "snull", "scure", "ko", "defign", "debuff", "twice", "xact"];
 // shown too, not counted by Fill: the BB cost cuts (sarc on Discord: "all sources of BB cost reduction"); the battle
 // check's casting every turn has them already
 const COVER_SHOW = [...COVER, "bbcut"];
@@ -3921,14 +3922,14 @@ const FILL_W = { newness: 30, newEnd: 80, old: 0, tier: 40, tierEnd: 10, surv: 0
 // debuffs, DEF ignore and extra action only break ties. pick: the least a role counts building the shortlist
 // OD fill and evasion count too (FILL_EXTRA, not cover rows); surv2: a team with 2 or more of mitigation, heal, KO
 // resistance / revive and evasion (what players want a team to have: 2 or 3 of them)
-const FILL_ROLE_W = { mit: 15, heal: 10, bbf: 10, ko: 6, snull: 2, debuff: 2, defign: 2, xact: 2, twice: 10, atk: 10, bbatk: 10, spark: 10, crit: 10, critrate: 10, elem: 10, od: 6, evade: 4, surv2: 10, pick: .5 };
+const FILL_ROLE_W = { mit: 15, heal: 10, bbf: 10, ko: 6, snull: 2, scure: 2, debuff: 2, defign: 2, xact: 2, twice: 10, atk: 10, bbatk: 10, spark: 10, crit: 10, critrate: 10, elem: 10, od: 6, evade: 4, surv2: 10, pick: .5 };
 // a leader skill's roles for the leader Fill picks: spark and elemental damage most, critical little (crit damage caps at 700%)
 const LS_FILL_W = { spark: 2, elem: 2, atk: 1, mit: 1, bbf: 1, heal: 1, crit: .5, critrate: .5 };
 const FILL_EXTRA = ["od", "evade"], FILL_SURV = ["mit", "heal", "ko", "evade"];
 // the priorities: Most damage (as tuned above), Balanced (the roles that keep a team alive count more), All roles
 // (a role worth 100: every role it can cover first, then the hardest-hitting such team)
 const FILL_PRIO = { dmg: { ...FILL_ROLE_W },
-  bal: { ...FILL_ROLE_W, mit: 30, heal: 25, bbf: 20, ko: 20, snull: 12, debuff: 6, defign: 6, xact: 6, od: 15, evade: 20, surv2: 40, pick: 1 },
+  bal: { ...FILL_ROLE_W, mit: 30, heal: 25, bbf: 20, ko: 20, snull: 12, scure: 12, debuff: 6, defign: 6, xact: 6, od: 15, evade: 20, surv2: 40, pick: 1 },
   roles: Object.fromEntries([...Object.keys(FILL_ROLE_W).map(k => [k, 100]), ["pick", 1]]) };
 const FILL_PRIO_NAME = { dmg: "Most damage", bal: "Balanced", roles: "All roles" };
 // a role Fill counts the team has; with the Mitigator chip, mitigation only from a unit's BB, SBB, UBB or Dual BB
@@ -4747,7 +4748,7 @@ async function renderTeam() {
       <div class="chipwrap prio" style="margin:-4px 0 8px"><span class="small dim">Priority</span>${
         Object.entries(FILL_PRIO_NAME).map(([k, n]) => `<button class="chip ${fillPrio === k ? "on" : ""}" data-prio="${k}">${n}</button>`).join("")}</div>
       <p class="small dim" style="margin:0">Tap a spot to choose a unit. <b>Fill</b> picks ${SQ.mineOnly ? `from the ${mine.size} units in your box` : "7★ and Omni units you can get in Revived"} (a unit twice or more when that's better) for the team that hits hardest in the battle check, with every unit casting every turn. ${
-        fillPrio === "roles" ? "<b>All roles</b>: every role it can cover first, then damage." : fillPrio === "bal" ? "<b>Balanced</b>: two or more of mitigation, heal, KO resistance and evasion, plus BB and OD fill and status cure, count more." : "<b>Most damage</b>: mitigation, heal and BB fill count a little, other roles only break ties."}${
+        fillPrio === "roles" ? "<b>All roles</b>: every role it can cover first, then damage." : fillPrio === "bal" ? "<b>Balanced</b>: two or more of mitigation, heal, KO resistance and evasion, plus BB and OD fill and status null and cure, count more." : "<b>Most damage</b>: mitigation, heal and BB fill count a little, other roles only break ties."}${
         fillMit ? " <b>Mitigator</b>: the team gets a unit whose BB or SBB reduces damage (a leader skill's few % doesn't count)." : ""} Omni units it adds come at ${OMNI_PLUS[FILL_OMNI][0]} (${OMNI_PLUS[FILL_OMNI][1]} SP), with their SP for it. Units you put in stay.</p></div>
     <div class="sec"><h3>Squad</h3>
       <div class="sqbar"><span class="costplate ${SQ.maxcost && cost > +SQ.maxcost ? "over" : ""}">COST <b>${cost}</b>/<input id="maxcost" inputmode="numeric" value="${esc(SQ.maxcost)}" placeholder="max" aria-label="Your max cost"></span>
