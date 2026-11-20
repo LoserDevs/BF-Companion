@@ -2338,6 +2338,18 @@ function weekHtml() {
     <p class="small dim" style="margin:6px 0 0">Vortex dungeons, from Revived's game server.${W.dayStart ? ` A day in the game starts at ${W.dayStart} your time.` : ""} Featured summon gates are below.</p></div>`;
 }
 
+// the weeks ahead, on the Quests tab: each rotating gate's next featured week (usrc.json "g"), next week's event too
+function comingHtml(S) {
+  const now = nowS(), W = weekNow(), by = new Map(), at = t => by.get(t) || by.set(t, []).get(t);
+  for (const [g, G] of Object.entries(S.g || {})) { const [t, f = 0, , , , next = 0] = G; if (f & 2 && next > now) at(next).push([g, t]); }
+  const ev = W && W.next && W.ends > now ? W.ends : 0; if (ev) at(ev);
+  const weeks = [...by].sort((a, b) => a[0] - b[0]).slice(0, 8);
+  if (!weeks.length) return "";
+  const short = n => n.replace(/^Collab Summon: /, "");
+  return `<div class="sec" id="comingsec"><h3 class="purple">Coming up</h3>${weeks.map(([t, gs]) => `<div class="wkday"><span class="d">${dayFmt(t)}</span><span>${
+    t === ev ? `<b>Event: ${esc(W.next)}</b>${gs.length ? "<br>" : ""}` : ""}${gs.map(([g, n]) => `<span class="wkq" data-gate="${g}">${esc(short(n))}</span>`).join(", ")}</span></div>`).join("")}
+    <p class="small dim" style="margin:6px 0 0">The week each rotating summon gate is featured next, from Revived's game server. Tap a gate for its units. The game can still change it.</p></div>`;
+}
 // an evolution material's unit id: the data gives an id ("10130") or a name ("Fire Mecha God")
 const evoMat = m => UMAP[m] ? String(m) : UNITS.find(x => x.n === String(m).replace(/\s*\(.*\)$/, ""))?.id || null;
 async function evoChain(id) {
@@ -2888,7 +2900,7 @@ const DROP_EXAMPLES = ["Blue Claw", "Kagan Desert", "Excelsior Lead", "Holy Blad
 let dropRecent = store.get("bf.dq", []);
 function dropChips() {
   const chips = (title, list) => list.length ? `<div class="sec"><h3 class="blue">${title}</h3><div class="chipwrap">${list.map(t => `<button class="chip on" data-q="${esc(t)}">${esc(t)}</button>`).join("")}</div></div>` : "";
-  $("dres").innerHTML = chips("Recent searches", dropRecent) + chips("Try", DROP_EXAMPLES.filter(t => !dropRecent.includes(t))) + weekHtml() + gatesHtml(USRC || {});
+  $("dres").innerHTML = chips("Recent searches", dropRecent) + chips("Try", DROP_EXAMPLES.filter(t => !dropRecent.includes(t))) + weekHtml() + comingHtml(USRC || {}) + gatesHtml(USRC || {});
   $("dres").querySelectorAll("[data-gate]").forEach(b => b.onclick = () => go(`#/gate/${b.dataset.gate}`));
   $("dres").querySelectorAll("[data-q]").forEach(b => b.onclick = () => { $("dq").value = b.dataset.q; renderDrops(); saveDropSearch(); });
 }
