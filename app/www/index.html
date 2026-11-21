@@ -4549,12 +4549,14 @@ function battleCheckAt(team, W, NUMS, D, order = null) {
   const lead = rows.filter(r => r.i === 0 && SQ.lead || r.i === 5 && SQ.friend).map(r => (W[r.i]?.skills || []).find(x => x.kind === "Leader Skill"));
   const lsTurn = lead.reduce((a, s) => a + turnFill(s), 0) + rows.reduce((a, r) => a + (r.esTurnAll ? r.esTurn : 0), 0);
   const lsSpark = lead.reduce((a, s) => a + Math.max(...sparkFill(s)), 0) + rows.reduce((a, r) => a + (r.esSparkAll ? r.esSpark : 0), 0);
-  // BC cost cuts: the leader skills', plus the biggest extra skill cut for all allies or the unit's own (at most 75%)
+  // BC cost cuts: the leader skills', plus every unit's extra skill cut for all allies (they add up: the game sums passive 48
+  // from all sources; ZheVulture on Discord, 2026-11-21: four Kanekis' 10% each are 40%) and the unit's own extra skill's
   // (the game's passives for a leader skill, else its text; the leader's and friend's spheres' "adds to LS" ones too)
   const leadRows = rows.filter(r => r.i === 0 && SQ.lead || r.i === 5 && SQ.friend);
   const lsCut = leadRows.reduce((a, r, k) => a + (D?.[r.id]?.lsfx ? cut48Of(D[r.id].lsfx) : costCut(lead[k])) + (TSPH[TCUR]?.[r.i] || []).reduce((s, sid) => s + (sid ? cut48Of(lsAddOf(sid)) : 0), 0), 0);
   const lsBack = leadRows.reduce((a, r) => a + back49Of(D?.[r.id]?.lsfx) + (TSPH[TCUR]?.[r.i] || []).reduce((s, sid) => s + (sid ? back49Of(lsAddOf(sid)) : 0), 0), 0);
-  const esCut = Math.max(0, ...rows.map(r => r.esCutAll ? r.esCut : r.esCutParty)), esBack = Math.max(0, ...rows.map(r => r.esBackParty));
+  const esParty = r => r.esCutAll ? r.esCut : r.esCutParty;  // the part of a unit's extra skill cut that is for all allies
+  const esCut = rows.reduce((a, r) => a + esParty(r), 0), esBack = rows.reduce((a, r) => a + r.esBackParty, 0);
   const spark = sparkCheck(rows, W, D, order);
   // casting twice: the skill each unit casts may cast twice (game data "twice", %); one for all allies counts for everyone
   // (the team's best), one only for itself on itself. Expected damage: × (1 + chance)
@@ -4567,8 +4569,8 @@ function battleCheckAt(team, W, NUMS, D, order = null) {
     r.sparks = m ? Math.round(spark.best.per[k] * m.sp.reduce((a, x) => a + x.length - 2, 0)) : 0;
     // the gauge it needs to cast again (the game, 2026-11-10: an SBB needs the BB segment and the SBB segment; each cut
     // by passive 48, truncated, no cap in quests; passive 49 gives back a share of the BB segment after the cast)
-    r.cut = Math.min(100, lsCut + Math.max(esCut, r.esCut) + r.sphCut + r.spCut);
-    r.back = lsBack + Math.max(esBack, r.esBack) + r.sphBack + r.spBack;
+    r.cut = Math.min(100, lsCut + esCut - esParty(r) + r.esCut + r.sphCut + r.spCut);  // the others' party cuts + all of its own extra skill's
+    r.back = lsBack + esBack - r.esBackParty + r.esBack + r.sphBack + r.spBack;
     const seg = c => Math.max(0, Math.floor(c * (1 - r.cut / 100) + 1e-9)), bbSeg = seg(r.s?.kind === "SBB" && r.bbCost ? r.bbCost : r.cost);
     r.need = Math.max(0, (r.s?.kind === "SBB" && r.bbCost ? bbSeg + seg(r.cost) : seg(r.cost)) - Math.min(bbSeg, Math.floor(bbSeg * r.back / 100)));
     const share = m ? spark.best.per[k] || 0 : 0;
