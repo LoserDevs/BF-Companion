@@ -3640,6 +3640,10 @@ function addToTeam(id) {
 // fill empty slots one by one with the unit that covers the most of what is still missing (only one element if chosen):
 // from your box, or the 7★ and Omni units you can get in Revived (S = usrc.json, "o": evolving one you get counts)
 let fillEl = store.get("bf.fillel", "");
+// the star level Fill builds from: "" the default (7★ + Omni; any rarity from your box), "8" Omni, "7", "6", "5" (5★ and below)
+let fillRar = store.get("bf.fillrar", "");
+const FILL_RAR = [["", "Default"], ["8", "Omni only"], ["7", "7★ only"], ["6", "6★ only"], ["5", "5★ and below"]];
+const fillRarOk = u => fillRar === "" ? true : fillRar === "5" ? u.r <= 5 : u.r === +fillRar;
 // what Fill puts first (ven on Discord: "a kind of priority for auto filling"): FILL_PRIO's role weights for FILL_ROLE_W
 let fillPrio = store.get("bf.fillprio", "dmg");
 // Fill takes a mitigator: a unit whose BB/SBB/UBB reduces damage (a leader skill's 5% doesn't count then)
@@ -4006,7 +4010,10 @@ const dupOk = (t, id) => { const n = t.filter(x => x === id).length; if (n >= (S
   return !n || new Set(t.filter((x, i) => x && t.indexOf(x) !== i)).size < FILL_DUP.pairs; };
 function fillPool(el, S) {
   const can = new Set(S?.o || []);
-  return UNITS.filter(u => (SQ.mineOnly ? mine.has(u.id) : u.r >= 7 && !u.f && (!can.size || can.has(u.id))) && (!el || u.e === el) && TAGS.units[u.id] && !/\(custom\)/i.test(u.n));
+  // the "can get in Revived" list (usrc.json "o") may only cover some rarities: use it only for a rarity it has units of
+  const useCan = can.size && (fillRar === "" || UNITS.some(u => fillRarOk(u) && can.has(u.id)));
+  return UNITS.filter(u => (SQ.mineOnly ? mine.has(u.id) && fillRarOk(u) : (fillRar === "" ? u.r >= 7 : fillRarOk(u)) && !u.f && (!useCan || can.has(u.id)))
+    && (!el || u.e === el) && TAGS.units[u.id] && !/\(custom\)/i.test(u.n));
 }
 function* autoFillSteps(team, el, S, keep = 1) {
   const pool = fillPool(el, S);
@@ -4762,6 +4769,8 @@ async function renderTeam() {
       <div class="chipwrap" style="margin:-2px 0 8px"><button class="chip ${SQ.mineOnly ? "on" : ""}" data-opt="mineOnly">✓ Fill from my box only</button><button class="chip ${fillMit ? "on" : ""}" data-fmit>✓ Mitigator</button></div>
       <div class="chipwrap prio" style="margin:-4px 0 8px"><span class="small dim">Priority</span>${
         Object.entries(FILL_PRIO_NAME).map(([k, n]) => `<button class="chip ${fillPrio === k ? "on" : ""}" data-prio="${k}">${n}</button>`).join("")}</div>
+              <div class="chipwrap prio" style="margin:-4px 0 8px"><span class="small dim">Rarity</span>${
+        FILL_RAR.map(([k, n]) => `<button class="chip ${fillRar === k ? "on" : ""}" data-frar="${k}">${n}</button>`).join("")}</div>
       <p class="small dim" style="margin:0">Tap a spot to choose a unit. <b>Fill</b> picks ${SQ.mineOnly ? `from the ${mine.size} units in your box` : "7★ and Omni units you can get in Revived"} (a unit twice or more when that's better) for the team that hits hardest in the battle check, with every unit casting every turn. ${
         fillPrio === "roles" ? "<b>All roles</b>: every role it can cover first, then damage." : fillPrio === "bal" ? "<b>Balanced</b>: two or more of mitigation, heal, KO resistance and evasion, plus BB and OD fill and status null and cure, count more." : "<b>Most damage</b>: mitigation, heal and BB fill count a little, other roles only break ties."}${
         fillMit ? " <b>Mitigator</b>: the team gets a unit whose BB or SBB reduces damage (a leader skill's few % doesn't count)." : ""} Omni units it adds come at ${OMNI_PLUS[FILL_OMNI][0]} (${OMNI_PLUS[FILL_OMNI][1]} SP), with their SP for it. Units you put in stay.</p></div>
@@ -4854,6 +4863,7 @@ async function renderTeam() {
   $("maxcost").onchange = e => { SQ.maxcost = e.target.value.replace(/\D/g, ""); saveSquad(); renderTeam(); };
   $("tfillel").onchange = e => { fillEl = e.target.value; store.set("bf.fillel", fillEl); };
   v.querySelectorAll("[data-prio]").forEach(b => b.onclick = () => { fillPrio = b.dataset.prio; store.set("bf.fillprio", fillPrio); renderTeam(); });
+  v.querySelectorAll("[data-frar]").forEach(b => b.onclick = () => { fillRar = b.dataset.frar; store.set("bf.fillrar", fillRar); renderTeam(); });
   v.querySelectorAll("[data-fmit]").forEach(b => b.onclick = () => { fillMit = !fillMit; store.set("bf.fillmit", fillMit); renderTeam(); });
   $("tfill").onclick = async () => {
     if (FILLING) return;
